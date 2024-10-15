@@ -13,7 +13,7 @@ import uploadImage from '../utils/uploadFile.js';
 import removeFile from '../utils/removeFile.js';
 import env from '../utils/env.js';
 
-const cloudinaryFolder = env('CLOUDINARY_FOLDER');
+// const cloudinaryFolder = env('CLOUDINARY_FOLDER');
 
 export const getContactsController = async (req, res) => {
   const { page, perPage } = parsePaginationParams(req.query);
