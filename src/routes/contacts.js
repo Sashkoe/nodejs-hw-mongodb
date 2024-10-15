@@ -1,3 +1,4 @@
+
 import { Router } from 'express';
 import { ctrlWrapper } from '../utils/ctrlWrapper.js';
 import {
@@ -14,6 +15,7 @@ import {
   updateContactValidationSchema,
 } from '../validation/contact-schemas.js';
 import { authenticate } from '../middlewares/authenticate.js';
+import upload from '../middlewares/uploadIntoTempDir.js';
 
 const contactsRouter = Router();
 contactsRouter.use('/', authenticate);
@@ -23,11 +25,13 @@ contactsRouter.get('/:contactId', ctrlWrapper(getContactByIdController));
 contactsRouter.delete('/:contactId', ctrlWrapper(deleteContactController));
 contactsRouter.post(
   '/',
+  upload.single('photo'),
   validateBody(createContactValidationSchema),
   ctrlWrapper(createContactController),
 );
 contactsRouter.patch(
   '/:contactId',
+  upload.single('photo'),
   validateBody(updateContactValidationSchema),
   ctrlWrapper(patchContactController),
 );

@@ -1,11 +1,17 @@
 import { Session } from '../db/models/Session.js';
 import { User } from '../db/models/User.js';
 import { randomBytes } from 'crypto';
+import sendEmail from './utils/sendEmail.js';
 import bcrypt from 'bcrypt';
+import currentYear from '../utils/getCurrentYear.js';
+import jwt from 'jsonwebtoken';
 import {
   accessTokenValidityTime,
   refreshTokenValidityTime,
 } from '../constants/users-constants.js';
+import { generatePasswordResetEmail } from '../utils/generatePasswordResetEmail.js';
+import env from '../utils/env.js';
+import { createJwtToken } from '../utils/jwt.js';
 
 export const findUser = (filter) => User.findOne(filter);
 export const findSession = (filter) => Session.findOne(filter);
@@ -47,4 +53,33 @@ export const refreshSession = async (refreshToken) => {
     userId: oldSession.userId,
     ...newSession,
   });
+};
+
+export const sendPasswordResetToken = async (user) => {
+  const { _id: userId, name: userName, email } = user;
+  const passwordResetToken = createJwtToken({
+    sub: userId,
+    email,
+  });
+
+  const resetLink = `${env(
+    'FRONTEND_DOMAIN',
+  )}/reset-password?token=${passwordResetToken}`;
+
+  const emailData = {
+    to: email,
+    subject: 'Reset password',
+    html: generatePasswordResetEmail({
+      userName,
+      resetLink,
+      currentYear,
+    }),
+  };
+
+  return sendEmail(emailData);
+};
+
+export const resetPassword = async (userId, password) => {
+  const hashedPassword = await bcrypt.hash(password, 10);
+  return User.findByIdAndUpdate(userId, { password: hashedPassword });
 };

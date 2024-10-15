@@ -9,7 +9,11 @@ import {
   updateContact,
 } from '../services/contacts.js';
 import { parseFilterParams } from '../utils/parseFilterParams.js';
-import { findSession, refreshSession } from '../services/auth.js';
+import uploadImage from '../utils/uploadFile.js';
+import removeFile from '../utils/removeFile.js';
+import env from '../utils/env.js';
+
+const cloudinaryFolder = env('CLOUDINARY_FOLDER');
 
 export const getContactsController = async (req, res) => {
   const { page, perPage } = parsePaginationParams(req.query);
@@ -53,12 +57,15 @@ export const deleteContactController = async (req, res) => {
   if (!removedContact) {
     throw createHttpError(404, 'Contact not found');
   }
+  await removeFile(removedContact, cloudinaryFolder);
   res.sendStatus(204);
 };
 
 export const createContactController = async (req, res) => {
+  const photo = await uploadImage(req.file, cloudinaryFolder);
+
   const { _id: userId } = req.user;
-  const createdContact = await createContact({ ...req.body, userId });
+  const createdContact = await createContact({ ...req.body, userId, photo });
 
   res.status(201).json({
     status: 201,
@@ -68,17 +75,25 @@ export const createContactController = async (req, res) => {
 };
 
 export const patchContactController = async (req, res) => {
+  if (Object.keys(req.body).length === 0) {
+    throw createHttpError(400, 'Please check the provided data');
+  }
+
   const { contactId } = req.params;
   const { body } = req;
   const { _id: userId } = req.user;
-  const updatedContactRawData = await updateContact(
-    { _id: contactId, userId },
-    body,
-  );
 
-  if (!updatedContactRawData.value) {
+  const contact = await getContactById({ _id: contactId, userId });
+  if (!contact) {
     throw createHttpError(404, 'Contact not found');
   }
+
+  const photo = await uploadImage(req.file, cloudinaryFolder, contact.photo);
+
+  const updatedContactRawData = await updateContact(
+    { _id: contactId, userId },
+    { ...body, photo },
+  );
 
   res.json({
     status: 200,
