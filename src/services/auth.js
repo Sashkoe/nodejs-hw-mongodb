@@ -1,7 +1,7 @@
 import { Session } from '../db/models/Session.js';
 import { User } from '../db/models/User.js';
 import { randomBytes } from 'crypto';
-import sendEmail from './utils/sendEmail.js';
+import sendEmail from '../utils/sendEmail.js';
 import bcrypt from 'bcrypt';
 import currentYear from '../utils/getCurrentYear.js';
 import jwt from 'jsonwebtoken';
