@@ -1,115 +1,127 @@
 import createHttpError from 'http-errors';
-import { THIRTY_DAYS } from '../constants/index.js';
 import {
-  registerUser,
+  findSession,
+  findUser,
   loginUser,
   logoutUser,
-  refreshUsersSession,
-  requestResetToken,
+  refreshSession,
+  registerUser,
   resetPassword,
+  sendPasswordResetToken,
 } from '../services/auth.js';
+import bcrypt from 'bcrypt';
+import { refreshTokenValidityTime } from '../constants/users-constants.js';
+import { verifyToken } from '../utils/jwt.js';
 
-export const registerUserController = async (req, res) => {
-  const { name, email, password } = req.body;
+const setSessionCookies = (res, session) => {
+  res.cookie('refreshToken', session.refreshToken, {
+    httpOnly: true,
+    expires: new Date(Date.now() + refreshTokenValidityTime),
+  });
+};
 
-  if (!name || !email || !password) {
-    throw createHttpError(
-      400,
-      'Missing required fields: name, email or password',
-    );
+export const registerController = async (req, res) => {
+  const { email } = req.body;
+  const user = await findUser({ email });
+  if (user) {
+    throw createHttpError(409, 'Email in use');
   }
-
-  const user = await registerUser({ name, email, password });
+  const newUser = await registerUser(req.body);
+  const data = {
+    name: newUser.name,
+    email: newUser.email,
+  };
 
   res.status(201).json({
     status: 201,
-    message: 'Successfully registered a user!',
-    data: user,
+    message: 'User successfully registered',
+    data,
   });
 };
 
-export const loginUserController = async (req, res) => {
+export const loginController = async (req, res) => {
   const { email, password } = req.body;
+  const user = await findUser({ email });
+  if (!user) throw createHttpError(401, 'Wrong credentials');
 
-  if (!email || !password) {
-    throw createHttpError(400, 'Missing required fields: email or password');
-  }
+  const isCorrectPassword = await bcrypt.compare(password, user.password);
+  if (!isCorrectPassword) throw createHttpError(401, 'Wrong credentials');
 
-  const session = await loginUser({ email, password });
-
-  res.cookie('refreshToken', session.refreshToken, {
-    httpOnly: true,
-    expires: new Date(Date.now() + THIRTY_DAYS),
-  });
-  res.cookie('sessionId', session._id, {
-    httpOnly: true,
-    expires: new Date(Date.now() + THIRTY_DAYS),
-  });
+  const session = await loginUser(user._id);
+  setSessionCookies(res, session);
 
   res.json({
     status: 200,
-    message: 'Successfully logged in an user!',
-    data: {
-      accessToken: session.accessToken,
-    },
+    message: 'Successfully logged in a user!',
+    data: { accessToken: session.accessToken },
   });
 };
 
-const setupSession = (res, session) => {
-  res.cookie('refreshToken', session.refreshToken, {
-    httpOnly: true,
-    expires: new Date(Date.now() + THIRTY_DAYS),
-  });
-  res.cookie('sessionId', session._id, {
-    httpOnly: true,
-    expires: new Date(Date.now() + THIRTY_DAYS),
-  });
-};
+export const refreshController = async (req, res) => {
+  const { refreshToken } = req.cookies;
+  const activeSession = await findSession({ refreshToken });
+  if (!activeSession) throw createHttpError(401, 'Session is not found');
 
-export const refreshUserSessionController = async (req, res) => {
-  const session = await refreshUsersSession({
-    sessionId: req.cookies.sessionId,
-    refreshToken: req.cookies.refreshToken,
-  });
+  if (new Date() > activeSession.refreshTokenValidUntil)
+    throw createHttpError(401, 'Session token is invalid');
 
-  setupSession(res, session);
+  const newSession = await refreshSession({ _id: activeSession._id });
+  setSessionCookies(res, newSession);
 
   res.json({
     status: 200,
     message: 'Successfully refreshed a session!',
-    data: {
-      accessToken: session.accessToken,
-    },
+    data: { accessToken: newSession.accessToken },
   });
 };
 
-export const logoutUserController = async (req, res) => {
-  if (req.cookies.sessionId) {
-    await logoutUser(req.cookies.sessionId);
-  }
-
-  res.clearCookie('sessionId');
-  res.clearCookie('refreshToken');
-
-  res.status(204).send();
+export const logoutController = async (req, res) => {
+  const { refreshToken } = req.cookies;
+  const activeSession = await findSession({ refreshToken });
+  if (!activeSession) throw createHttpError(401, 'Session is not found');
+  await logoutUser({ _id: activeSession._id });
+  res.clearCookie('refreshToken').sendStatus(204);
 };
 
-export const requestResetEmailController = async (req, res) => {
-  await requestResetToken(req.body.email);
+export const passwordResetRequestController = async (req, res) => {
+  const { email } = req.body;
+  const user = await findUser({ email });
+  if (!user) throw createHttpError(404, 'User not found!');
+
+  try {
+    await sendPasswordResetToken(user);
+  } catch (error) {
+    throw createHttpError(
+      500,
+      'Failed to send the email, please try again later.',
+      error,
+    );
+  }
 
   res.json({
-    message: 'Reset password email was successfully sent!',
     status: 200,
+    message: 'Reset password email has been successfully sent.',
     data: {},
   });
 };
 
-export const resetPasswordController = async (req, res) => {
-  await resetPassword(req.body);
+export const passwordResetController = async (req, res) => {
+  const { token, password } = req.body;
+  const { data, error } = verifyToken(token);
+  if (error) throw createHttpError(401, 'Token is expired or invalid.');
+
+  const userId = data.sub;
+
+  const user = await findUser({ _id: userId });
+  if (!user) throw createHttpError(404, 'User not found!');
+
+  await resetPassword(userId, password);
+  const activeSession = await findSession({ userId });
+  await logoutUser({ _id: activeSession._id });
 
   res.json({
-    message: 'Password was successfully reset!',
     status: 200,
+    message: 'Password has been successfully reset.',
     data: {},
   });
 };

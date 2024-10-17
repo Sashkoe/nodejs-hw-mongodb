@@ -1,39 +1,32 @@
 import express from 'express';
-import pino from 'pino-http';
+import env from './utils/env.js';
 import cors from 'cors';
-import cookieParser from 'cookie-parser';
-import { env } from './utils/env.js';
-import { errorHandler } from './middlewares/errorHandler.js';
 import { notFoundHandler } from './middlewares/notFoundHandler.js';
-import router from './routers/index.js';
-import { UPLOAD_DIR } from './constants/index.js';
+import { errorHandler } from './middlewares/errorHandler.js';
+import router from './routes/index.js';
+import cookieParser from 'cookie-parser';
+// import pino from 'pino-http';
 
 const PORT = Number(env('PORT', '3000'));
 
-export const startServer = () => {
+export default function setupServer() {
   const app = express();
 
-  app.use(express.json());
+  // app.use(
+  //   pino({
+  //     transport: { target: 'pino-pretty' },
+  //   }),
+  // );
+
   app.use(cors());
+  app.use(express.json());
   app.use(cookieParser());
 
-  app.use(
-    pino({
-      transport: {
-        target: 'pino-pretty',
-      },
-    }),
-  );
-
   app.use(router);
-
-  app.use('/uploads', express.static(UPLOAD_DIR));
-
   app.use('*', notFoundHandler);
-
   app.use(errorHandler);
 
   app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
   });
-};
+}
