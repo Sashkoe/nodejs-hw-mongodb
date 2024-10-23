@@ -5,7 +5,7 @@ export const createContactSchema = Joi.object({
   phoneNumber: Joi.string()
     .pattern(/^\+380\d{9}$/)
     .required(),
-  email: Joi.string().email().min(3).max(20).required(),
+  email: Joi.string().email().required(),
   isFavourite: Joi.boolean().default(false),
   contactType: Joi.string()
     .min(3)
@@ -20,7 +20,7 @@ export const updateContactSchema = Joi.object({
   phoneNumber: Joi.string()
     .pattern(/^\+380\d{9}$/)
     .required(),
-  email: Joi.string().email().min(3).max(20),
+  email: Joi.string().email(),
   isFavourite: Joi.boolean().default(false),
   contactType: Joi.string()
     .min(3)
